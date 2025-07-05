@@ -203,41 +203,7 @@ class PairSpecificPreprocessor:
                 print(f"   ⚠️ No SMA columns available for trend alignment")
                 df['trend_alignment'] = df['h1_trend']  # Fall back to H1 trend only
             
-            print(f"   ✅ {self.pair_name} sequences: {len(sequences):,}")
-        print(f"   📐 Shape: {X.shape}")
-        
-        # Final distribution logging
-        if self.target_mode == 'binary':
-            class_counts = np.bincount(y.astype(int))
-            if len(class_counts) > 1:
-                minority_ratio = class_counts.min() / len(y)
-                print(f"   🎯 Final minority ratio: {minority_ratio:.3f}")
-            else:
-                print(f"   ⚠️ Single class detected: {class_counts}")
-        else:
-            unique, counts = np.unique(y, return_counts=True)
-            class_names = {0: 'Long', 1: 'Flat', 2: 'Short'}
-            class_breakdown = {class_names.get(cls, cls): count for cls, count in zip(unique, counts)}
-            print(f"   🎯 Final class distribution: {class_breakdown}")
-        
-        return X, y
-
-def create_preprocessor(pair_name: str, config: dict, target_mode: str = None) -> PairSpecificPreprocessor:
-    """Factory function to create preprocessor from configuration."""
-    data_config = config.get('data', {})
-    model_config = config.get('model', {})
-    
-    # Override target_mode if specified
-    final_target_mode = target_mode or model_config.get('target_mode', 'binary')
-    
-    return PairSpecificPreprocessor(
-        pair_name=pair_name,
-        sequence_length=data_config.get('sequence_length', 64),
-        target_mode=final_target_mode,
-        use_smote=config.get('training', {}).get('use_smote', False)
-    )
-
-__all__ = ['PairSpecificPreprocessor', 'create_preprocessor'] Multi-timeframe features created successfully")
+            print(f"   ✅ Multi-timeframe features created successfully")
             
         except Exception as e:
             print(f"   ❌ Multi-timeframe feature creation failed: {e}")
@@ -614,4 +580,38 @@ __all__ = ['PairSpecificPreprocessor', 'create_preprocessor'] Multi-timeframe fe
         X = np.array(sequences)
         y = np.array(targets)
         
-        print(f"   ✅
+        print(f"   ✅ {self.pair_name} sequences: {len(sequences):,}")
+        print(f"   📐 Shape: {X.shape}")
+        
+        # Final distribution logging
+        if self.target_mode == 'binary':
+            class_counts = np.bincount(y.astype(int))
+            if len(class_counts) > 1:
+                minority_ratio = class_counts.min() / len(y)
+                print(f"   🎯 Final minority ratio: {minority_ratio:.3f}")
+            else:
+                print(f"   ⚠️ Single class detected: {class_counts}")
+        else:
+            unique, counts = np.unique(y, return_counts=True)
+            class_names = {0: 'Long', 1: 'Flat', 2: 'Short'}
+            class_breakdown = {class_names.get(cls, cls): count for cls, count in zip(unique, counts)}
+            print(f"   🎯 Final class distribution: {class_breakdown}")
+        
+        return X, y
+
+def create_preprocessor(pair_name: str, config: dict, target_mode: str = None) -> PairSpecificPreprocessor:
+    """Factory function to create preprocessor from configuration."""
+    data_config = config.get('data', {})
+    model_config = config.get('model', {})
+    
+    # Override target_mode if specified
+    final_target_mode = target_mode or model_config.get('target_mode', 'binary')
+    
+    return PairSpecificPreprocessor(
+        pair_name=pair_name,
+        sequence_length=data_config.get('sequence_length', 64),
+        target_mode=final_target_mode,
+        use_smote=config.get('training', {}).get('use_smote', False)
+    )
+
+__all__ = ['PairSpecificPreprocessor', 'create_preprocessor']
