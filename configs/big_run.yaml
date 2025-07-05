@@ -1,0 +1,166 @@
+# configs/big_run.yaml
+# Big data training configuration for enhanced performance
+
+system:
+  name: "Big Data Multi-Pair LSTM System"
+  version: "1.0.0"
+  description: "Enhanced configuration for large dataset training with 50k+ candles"
+
+# Data Configuration - Big Data Settings
+data:
+  granularity: "M15"          # M15 for balance, H1 for even bigger datasets, M5 for high-freq
+  lookback_candles: 50000     # ≈ 6 months - 1 year of data
+  sequence_length: 128        # Longer sequences for pattern recognition
+  
+# Model Configuration - Enhanced for Big Data
+model:
+  target_mode: "binary"       # USD_JPY & XAU_USD auto-switch to three_class
+  use_focal_loss: true        # Essential for class imbalance
+  dropout_rate: 0.45          # Base dropout
+  dropout_upper: 0.70         # More aggressive regularization for big data
+  hidden_size: 96             # Increased capacity for complex patterns
+  num_layers: 2
+  use_layer_norm: true
+
+# Training Configuration - Optimized for Big Data
+training:
+  epochs: 120                 # More epochs for convergence
+  batch_size: 128             # Larger batches for stability (reduce to 64 if RAM issues)
+  learning_rate: 0.0008       # Slightly lower LR for stability
+  weight_decay: 0.0001
+  patience: 8                 # More patience for big data
+  gradient_clip: 0.5
+  use_smote: false            # Trainer auto-applies SMOTE if minority < 0.15
+
+# Optimization Configuration - Enhanced Search
+optimization:
+  optuna_enabled: true
+  n_trials: 20                # More trials for better optimization
+  early_stopping:
+    val_acc_threshold: 0.65   # Higher threshold for big data
+    train_val_gap_max: 0.12   # Stricter overfitting control
+  search_space:
+    horizon: [32, 48, 64]     # Expanded horizon search
+    seq_len: [96, 128, 160]   # Longer sequences for big data
+    dropout: [0.45, 0.65]     # Enhanced regularization range
+    hidden_size: [64, 96, 128] # Larger models
+    k_pips_mult: [0.8, 1.0, 1.2] # More k-pips options
+
+# Dynamic K-Pips Configuration
+dynamic_k_pips:
+  enabled: true
+  default_formula: "max(0.35 * ATR(horizon), 0.8 * avg_spread)"  # Slightly more conservative
+  rescue_formula: "max(0.20 * ATR(horizon), 0.8 * avg_spread)"  # USD_JPY/XAU_USD rescue
+  rescue_pairs: ["USD_JPY", "XAU_USD"]
+
+# SMOTE Configuration - Auto-trigger
+smote:
+  minority_threshold: 0.15    # Auto-apply if below 15%
+  force_mode: true           # Force even with single class
+  synthetic_minority_ratio: 0.01
+  k_neighbors: 5             # More neighbors for big data
+  rescue_pairs: ["USD_JPY", "XAU_USD"]
+
+# Memory Management for Big Data
+memory:
+  gradient_accumulation_steps: 2  # Effective batch_size = batch_size * accumulation_steps
+  pin_memory: true               # Faster CPU->GPU transfer
+  num_workers: 4                 # Parallel data loading
+  prefetch_factor: 2             # Prefetch batches
+
+# Pair-Specific Parameters - Enhanced for Big Data
+pairs:
+  EUR_USD:
+    volatility_window: 20      # Longer windows for big data
+    momentum_periods: [8, 16, 32]
+    ma_periods: [8, 21, 55]
+    default_horizon: 64
+    enhanced_dropout: 0.55
+    
+  GBP_USD:
+    volatility_window: 16
+    momentum_periods: [6, 12, 24] 
+    ma_periods: [12, 26, 65]
+    default_horizon: 48
+    enhanced_dropout: 0.50
+    
+  USD_JPY:
+    volatility_window: 24
+    momentum_periods: [10, 20, 40]
+    ma_periods: [10, 25, 89]
+    default_horizon: 64
+    force_target_mode: "three_class"  # Auto-forced
+    force_smote: true
+    enhanced_dropout: 0.50
+    
+  AUD_USD:
+    volatility_window: 18
+    momentum_periods: [8, 14, 28]
+    ma_periods: [8, 21, 55]
+    default_horizon: 64
+    enhanced_dropout: 0.55
+    
+  XAU_USD:
+    volatility_window: 12
+    momentum_periods: [4, 8, 16]
+    ma_periods: [5, 13, 34]
+    default_horizon: 48
+    force_target_mode: "three_class"  # Auto-forced
+    force_smote: true
+    enhanced_dropout: 0.50
+
+# API Configuration
+api:
+  api_key: "8d8619f4119fec7e59d73c61b76b480d-d0947fd967a22401c1e48bc1516ad0eb"
+  account_id: "101-004-35700665-002"
+  environment: "practice"
+  request_timeout: 30         # Longer timeout for big data requests
+  rate_limit_delay: 0.5       # Slower requests to avoid API limits
+
+# Output Configuration - Enhanced Logging
+output:
+  save_models: true
+  save_configs: true
+  save_plots: true
+  save_detailed_logs: true    # Extra logging for big runs
+  results_dir: "results/"
+  models_dir: "models/"
+  logs_dir: "logs/"
+  checkpoint_frequency: 20    # Save model every 20 epochs
+
+# Enhanced Sanity Checks for Big Data
+sanity_checks:
+  horizon_validation:
+    min_horizon: 32
+    max_horizon: 256
+    auto_correct: true
+  overfitting_detection:
+    enabled: true
+    threshold_pp: 15          # Stricter for big data (was 20)
+    check_after_epoch: 15     # Check later for big data
+    cooldown_enabled: true
+    cooldown_factor: 0.2      # More aggressive LR reduction
+  memory_monitoring:
+    enabled: true
+    max_memory_gb: 12         # Alert if memory usage > 12GB
+    batch_size_reduction: true # Auto-reduce batch_size if OOM
+  minority_ratio_logging: true
+  convergence_monitoring:
+    patience_multiplier: 1.5  # More patience for big datasets
+    min_improvement: 0.005    # Smaller improvements acceptable
+
+# Logging Configuration - Detailed for Big Runs
+logging:
+  level: "INFO"
+  detailed_metrics: true
+  save_epoch_details: true
+  memory_usage_logging: true
+  training_time_logging: true
+  
+# Performance Hints
+performance_hints:
+  - "For 50k+ candles, consider reducing batch_size to 64 if RAM < 16GB"
+  - "Use gradient_accumulation_steps=4 for effective batch_size=256"
+  - "Monitor GPU memory usage - reduce hidden_size if needed"
+  - "H1 granularity can handle even larger lookback_candles"
+  - "Enable mixed precision training for faster computation"

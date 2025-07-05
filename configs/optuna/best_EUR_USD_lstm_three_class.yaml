@@ -1,0 +1,61 @@
+best_parameters:
+  batch_size: 32
+  dropout: 0.40889790771866297
+  hidden_size: 64
+  horizon: 64
+  learning_rate: 3.4381725121151744e-05
+  num_layers: 1
+  seq_len: 128
+model_type: lstm
+optimization_history:
+  best_trial_number: 3
+  best_value: 52.62032085561497
+  model_type: lstm
+  n_trials: 15
+  optimization_direction: maximize
+  param_importance:
+    batch_size: !!python/object/apply:numpy._core.multiarray.scalar
+    - &id001 !!python/object/apply:numpy.dtype
+      args:
+      - f8
+      - false
+      - true
+      state: !!python/tuple
+      - 3
+      - <
+      - null
+      - null
+      - null
+      - -1
+      - -1
+      - 0
+    - !!binary |
+      n8/aUVI6zT8=
+    dropout: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      n0gTjXEHxT8=
+    hidden_size: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      PEqXZ/RRwz8=
+    horizon: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      31rsViGhwz8=
+    learning_rate: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      Z8eSe8L/sz8=
+    num_layers: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      S39M0C0Xrz8=
+    seq_len: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      Jb+xsHkFxT8=
+pair_name: EUR_USD
+reproducibility_seed: 42
+target_mode: three_class
+timestamp: '2025-07-03T00:02:34.373893'

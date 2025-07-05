@@ -1,0 +1,240 @@
+# configs/default.yaml
+# Enhanced configuration for modular LSTM system with backtesting support
+
+system:
+  name: "Modular LSTM System"
+  version: "1.0.0"
+  mode: "production"  # development, testing, production
+
+# Data configuration
+data:
+  granularity: "M15"
+  lookback_candles: 180000  # Maximum supported by OANDA
+  sequence_length: 64
+  cache_enabled: false
+  cache_directory: "data/cache"
+  
+  # Multi-timeframe support
+  timeframes:
+    signal: "M15"      # Signal generation timeframe
+    execution: "M5"    # Order execution timeframe
+    
+  # Data quality filters
+  min_samples: 1000
+  min_sequences: 200
+  outlier_threshold: 3.0
+
+# Model configuration
+model:
+  target_mode: "binary"  # binary, three_class
+  use_focal_loss: true
+  hidden_size: 64
+  num_layers: 2
+  dropout_rate: 0.45
+  dropout_upper: 0.70
+  use_layer_norm: true
+  
+  # Model rescue settings
+  rescue_pairs: ["USD_JPY", "XAU_USD"]
+  rescue_target_mode: "three_class"
+  rescue_force_smote: true
+
+# Training configuration
+training:
+  epochs: 120
+  epochs_fine: 5           # Fine-tuning epochs for walk-forward
+  batch_size: 128
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  patience: 5
+  use_smote: false         # Auto-enabled for three_class
+  
+  # Overfitting controls
+  early_stopping: true
+  overfitting_threshold: 20.0  # percentage points
+  cooldown_lr_factor: 0.3
+  gradient_clip_norm: 0.5
+
+# Optimization configuration
+optimization:
+  enabled: false
+  n_trials: 20
+  sampler: "TPE"           # TPE, Random, Grid
+  early_stopping_patience: 3
+  
+  # Search space
+  search_space:
+    horizon: [48, 64, 96]
+    seq_len: [64, 96, 128]
+    dropout: [0.45, 0.70]
+    hidden_size: [32, 64, 96]
+    k_pips_mult: [1.0, 1.2, 1.5]
+
+# Backtesting configuration
+backtesting:
+  # Walk-forward parameters
+  train_window_days: 180
+  retrain_freq_days: 7
+  fine_tune: false
+  
+  # Multi-timeframe setup
+  signal_tf: "M15"
+  exec_tf: "M5"
+  
+  # Trading simulation
+  position_size: 0.01      # Lot size
+  spread_multiplier: 1.2   # Realistic spread adjustment
+  commission_pips: 0.0     # Commission per trade
+  slippage_pips: 0.1       # Execution slippage
+  
+  # Risk management
+  max_positions: 1         # Per pair
+  stop_loss_pips: null     # null for no SL
+  take_profit_pips: null   # null for no TP
+  
+  # Execution window
+  execution_window_minutes: 25  # 5 x M5 candles
+  
+  # Performance thresholds
+  min_trades: 10
+  min_sharpe: 0.5
+  max_drawdown: 20.0
+
+# API configuration (OANDA)
+api:
+  api_key: "8d8619f4119fec7e59d73c61b76b480d-d0947fd967a22401c1e48bc1516ad0eb"
+  account_id: "101-004-35700665-002"
+  environment: "practice"  # practice, live
+  rate_limit_delay: 0.2    # seconds between requests
+  request_timeout: 30      # seconds
+  max_retries: 3
+
+# Currency pairs configuration
+pairs:
+  default_list: ["EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "XAU_USD", "USD_CHF", "USD_CAD"]
+  
+  # Pair-specific settings
+  EUR_USD:
+    priority: 1
+    volatility_factor: 1.0
+    session_preference: ["London", "NY"]
+    
+  GBP_USD:
+    priority: 2
+    volatility_factor: 1.3
+    session_preference: ["London", "NY"]
+    
+  USD_JPY:
+    priority: 3
+    volatility_factor: 1.1
+    session_preference: ["Tokyo", "London"]
+    rescue_mode: true
+    
+  AUD_USD:
+    priority: 4
+    volatility_factor: 1.2
+    session_preference: ["Sydney", "London"]
+    
+  XAU_USD:
+    priority: 5
+    volatility_factor: 2.5
+    session_preference: ["London", "NY"]
+    rescue_mode: true
+    
+  USD_CHF:
+    priority: 6
+    volatility_factor: 1.0
+    session_preference: ["London", "NY"]
+    
+  USD_CAD:
+    priority: 7
+    volatility_factor: 1.1
+    session_preference: ["NY", "London"]
+
+# Feature engineering
+features:
+  # Technical indicators
+  volatility_windows: [8, 12, 16, 20]
+  momentum_periods: [3, 4, 5, 8, 12, 16, 20]
+  ma_periods: [4, 8, 16, 21, 55, 64, 80]
+  
+  # Price position windows
+  price_position_windows: [16, 32, 64]
+  
+  # Bollinger Bands
+  bb_period: 20
+  bb_std_multiplier: 2
+  
+  # MACD
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  
+  # RSI periods
+  rsi_periods: [14]
+  
+  # Session features
+  session_scoring: true
+  overlap_bonus: 1.5
+
+# Logging and monitoring
+logging:
+  level: "INFO"           # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_rotation: true
+  max_file_size: "10MB"
+  backup_count: 5
+  
+  # MLflow tracking
+  mlflow:
+    enabled: true
+    uri: "file:./mlruns"
+    experiment_name: "LSTM_Forex_Training"
+    nested_runs: true
+
+# Output configuration
+output:
+  base_directory: "results"
+  save_models: true
+  save_plots: true
+  save_logs: true
+  
+  # File formats
+  model_format: "pytorch"  # pytorch, onnx
+  plot_format: "png"       # png, svg, pdf
+  data_format: "csv"       # csv, parquet
+  
+  # Compression
+  compress_results: false
+  compression_level: 6
+
+# Performance and resource limits
+performance:
+  max_memory_gb: 8
+  max_cpu_cores: 4
+  gpu_memory_fraction: 0.8
+  
+  # Processing limits
+  max_pairs_parallel: 2
+  max_sequence_length: 256
+  max_training_epochs: 200
+  
+  # Early stopping
+  val_acc_threshold: 65.0
+  overfit_gap_threshold: 15.0
+
+# Validation and testing
+validation:
+  train_split: 0.85
+  val_split: 0.15
+  shuffle: false           # Keep temporal order
+  
+  # Cross-validation
+  cv_enabled: false
+  cv_folds: 5
+  cv_purge_days: 7
+  
+  # Robustness tests
+  noise_test: false
+  dropout_test: false
+  adversarial_test: false

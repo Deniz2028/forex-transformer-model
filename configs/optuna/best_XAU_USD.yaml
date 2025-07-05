@@ -1,0 +1,5 @@
+dropout: 0.4734027960663655
+hidden_size: 96
+horizon: 64
+k_pips_mult: 1.2
+seq_len: 64

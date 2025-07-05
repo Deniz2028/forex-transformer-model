@@ -1,0 +1,111 @@
+system:
+  name: "Enhanced Transformer System"
+  version: "2.0.0"
+  model_type: "enhanced_transformer"
+
+data:
+  granularity: "M15"
+  lookback_candles: 25000
+  sequence_length: 96  # PDF önerisi: 8 saat M5 data için optimize
+  cache_enabled: true
+
+model:
+  type: "enhanced_transformer"
+  target_mode: "binary"
+  use_focal_loss: true  # PDF'de Dynamic Focal Loss önerisi
+  dropout_rate: 0.15    # Financial data için PDF önerisi
+
+# Enhanced Transformer - PDF'deki Forex-optimized settings
+transformer:
+  d_model: 512          # PDF önerisi: Daha büyük capacity
+  nhead: 8              # Optimal attention (512 % 8 = 0)
+  num_layers: 4         # Overfitting önleme
+  ff_dim: 1024          # 2x d_model
+  max_seq_len: 96       # sequence_length ile eşleşmeli
+  
+  # PDF'deki Advanced features
+  positional_encoding: "learnable"  # Custom positional encoding
+  layer_norm_eps: 1e-6
+  attention_dropout: 0.1
+
+training:
+  epochs: 30
+  batch_size: 16        # Transformer için küçük batch
+  learning_rate: 2e-4   # PDF önerisi: Lower LR for transformers
+  patience: 10
+  weight_decay: 0.01
+  use_smote: false
+  
+  # PDF'deki OneCycleLR scheduler configuration
+  scheduler: "OneCycleLR"  # PDF önerisi yerine ReduceLROnPlateau
+  scheduler_params:
+    max_lr: 2e-4
+    pct_start: 0.3        # Warmup %30
+    div_factor: 25.0      # Initial LR = max_lr/25
+    final_div_factor: 10000.0
+    anneal_strategy: "cos"
+  
+  gradient_clip: 1.0      # PDF önerisi: gradient clipping
+  
+  # PDF'deki gradient accumulation
+  accumulation_steps: 4   # Effective batch = 16 * 4 = 64
+
+# PDF'deki pair-specific configurations
+pair_configs:
+  EUR_USD:
+    d_model: 512
+    nhead: 8
+    num_layers: 4
+    ff_dim: 1024
+    dropout: 0.15
+    sequence_length: 96
+    
+  GBP_USD:
+    d_model: 384          # Volatilite için küçük
+    nhead: 12
+    num_layers: 6
+    dropout: 0.20         # Noise için higher
+    
+  USD_JPY:
+    target_mode: "three_class"  # PDF rescue mode
+    use_smote: true
+    
+  XAU_USD:
+    target_mode: "three_class"  # PDF rescue mode
+    use_smote: true
+
+# API configuration
+api:
+  api_key: "8d8619f4119fec7e59d73c61b76b480d-d0947fd967a22401c1e48bc1516ad0eb"
+  account_id: "101-004-35700665-002"
+  environment: "practice"
+
+# Output configuration
+output:
+  save_models: true
+  save_plots: true
+  base_directory: "results"
+  save_attention_plots: true  # PDF önerisi: Attention visualization
+
+# Enhanced features from PDF
+features:
+  multi_timeframe: true        # PDF önerisi
+  market_microstructure: true  # Spread shock, volume surge
+  regime_detection: true       # Volatility regimes
+  support_resistance: true     # Key levels
+  session_awareness: true      # London/NY/Tokyo sessions
+
+# MLflow tracking
+logging:
+  level: "INFO"
+  mlflow:
+    enabled: true
+    experiment_name: "Enhanced_Transformer_Forex_Optimized"
+    uri: "file:./mlruns"
+
+# PDF'deki Advanced validation
+validation:
+  method: "walk_forward"       # PDF önerisi
+  train_window_days: 252       # 1 trading year
+  step_size_days: 7           # 1 week
+  purge_window_hours: 24      # 1 day purge

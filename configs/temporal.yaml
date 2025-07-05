@@ -1,0 +1,256 @@
+# configs/temporal.yaml
+# Temporal Training Configuration - 2024 6 ay eğitim + 6 ay sinyal
+
+system:
+  name: "Temporal Enhanced Transformer System"
+  version: "2.0.0"
+  model_type: "enhanced_transformer"
+  description: "6 months training + 6 months signal generation without data leakage"
+
+# Temporal date ranges - Parametreleştirilebilir
+temporal:
+  train_start: "2024-01-01"
+  train_end: "2024-06-30"
+  signal_start: "2024-07-01"
+  signal_end: "2024-12-31"
+  
+  # Signal generation settings
+  confidence_threshold: 0.35        # Minimum confidence for signals
+  min_signal_gap_minutes: 15        # Minimum gap between signals
+  signal_filter_enabled: true       # Filter low-quality signals
+  
+  # Training time tracking
+  log_training_time: true
+  save_validation_plots: true       # Save train/val curves
+  plot_format: "png"               # png, svg, pdf
+
+# Data configuration - Optimized for temporal
+data:
+  granularity: "M15"
+  lookback_candles: 100000         # Enough for 6+ months
+  sequence_length: 64
+  cache_enabled: true
+  cache_directory: "data/temporal_cache"
+  
+  # Data quality for temporal
+  min_train_samples: 5000          # Minimum for training period
+  min_signal_samples: 1000         # Minimum for signal period
+  data_leakage_check: true         # Strict temporal validation
+
+# Model configuration - Enhanced Transformer optimized
+model:
+  type: "enhanced_transformer"
+  target_mode: "binary"            # Can be overridden per pair
+  use_focal_loss: false            # Use weighted BCE instead
+  dropout_rate: 0.1
+
+# Enhanced Transformer configuration
+transformer:
+  d_model: 256
+  nhead: 8                         # 256 % 8 = 0 ✅
+  num_layers: 4
+  ff_dim: 512
+  max_seq_len: 64
+
+# Training configuration - Temporal optimized
+training:
+  epochs: 50                       # Balanced for temporal
+  batch_size: 32
+  learning_rate: 2e-4              # Lower LR for stability
+  patience: 12                     # More patience for temporal
+  weight_decay: 0.01
+  use_smote: false                 # Auto-enabled for imbalanced data
+  
+  # Advanced training settings
+  scheduler: "CosineAnnealingWarmRestarts"
+  warmup_steps: 1000
+  gradient_clip: 0.5
+  early_stopping_min_delta: 0.001
+  
+  # Overfitting protection for temporal
+  overfitting_threshold: 15.0      # Max train-val gap (percentage points)
+  dropout_adjustment_enabled: true # Auto-increase dropout if overfitting
+  model_restart_on_overfit: true   # Restart training with higher dropout
+
+# Pair-specific temporal settings
+pairs:
+  # Major pairs - stable settings
+  EUR_USD:
+    target_mode: "binary"
+    confidence_threshold: 0.3
+    min_signal_confidence: 0.25
+    enhanced_dropout: 0.50
+    
+  GBP_USD:
+    target_mode: "binary"
+    confidence_threshold: 0.35
+    min_signal_confidence: 0.30
+    enhanced_dropout: 0.50
+    
+  USD_JPY:
+    target_mode: "three_class"      # Force three_class for USD_JPY
+    confidence_threshold: 0.4       # Higher threshold for stability
+    min_signal_confidence: 0.35
+    force_smote: true
+    enhanced_dropout: 0.55
+    
+  AUD_USD:
+    target_mode: "binary"
+    confidence_threshold: 0.35
+    min_signal_confidence: 0.30
+    enhanced_dropout: 0.55
+    
+  XAU_USD:
+    target_mode: "three_class"      # Force three_class for Gold
+    confidence_threshold: 0.45      # Higher threshold for volatile asset
+    min_signal_confidence: 0.40
+    force_smote: true
+    enhanced_dropout: 0.60
+
+# Signal generation optimization
+signal_generation:
+  batch_processing: true           # Process signals in batches
+  parallel_processing: false      # Sequential for consistency
+  memory_efficient: true          # Use memory-efficient inference
+  
+  # Signal quality filters
+  remove_flat_signals: true       # Remove neutral/flat predictions
+  min_price_movement: 0.0001      # Minimum pip movement for signal validity
+  max_signals_per_day: 50         # Prevent signal spam
+  
+  # Signal output format
+  include_probabilities: true     # Include raw probabilities in CSV
+  include_confidence: true        # Include confidence scores
+  include_price_data: true        # Include current price in signals
+  timestamp_format: "%Y-%m-%d %H:%M:%S"
+
+# Performance monitoring - Temporal specific
+monitoring:
+  training_time_tracking: true
+  memory_usage_tracking: true
+  signal_generation_metrics: true
+  
+  # Performance thresholds
+  max_training_time_hours: 8      # Alert if training takes too long
+  max_memory_usage_gb: 12         # Memory usage warning
+  min_validation_accuracy: 55.0   # Minimum acceptable validation accuracy
+  
+  # Validation curve plotting
+  save_training_plots: true
+  plot_every_n_epochs: 10
+  plot_directory: "temporal_plots"
+
+# API configuration
+api:
+  api_key: "8d8619f4119fec7e59d73c61b76b480d-d0947fd967a22401c1e48bc1516ad0eb"
+  account_id: "101-004-35700665-002"
+  environment: "practice"
+  request_timeout: 45              # Longer timeout for temporal data
+  rate_limit_delay: 0.3
+
+# Output configuration - Enhanced for temporal
+output:
+  base_directory: "temporal_results"
+  save_models: true
+  save_plots: true
+  save_detailed_logs: true
+  compress_results: false
+  
+  # Temporal-specific outputs
+  signal_directory: "temporal_signals"
+  model_directory: "temporal_models"
+  report_directory: "temporal_reports"
+  plot_directory: "temporal_plots"
+  
+  # File naming convention
+  timestamp_format: "%Y%m%d_%H%M%S"
+  include_pair_in_filename: true
+  include_model_type_in_filename: true
+
+# Logging configuration - Detailed for temporal
+logging:
+  level: "INFO"
+  detailed_metrics: true
+  save_epoch_details: true
+  training_time_logging: true
+  memory_usage_logging: true
+  
+  # MLflow integration
+  mlflow:
+    enabled: true
+    uri: "file:./mlruns"
+    experiment_name: "Temporal_Enhanced_Transformer"
+    nested_runs: true
+    log_artifacts: true
+    
+    # Temporal-specific MLflow metrics
+    log_training_time: true
+    log_signal_count: true
+    log_confidence_distribution: true
+
+# Validation and quality checks
+validation:
+  strict_temporal_validation: true  # No data leakage allowed
+  cross_validation_disabled: true   # Not applicable for temporal
+  
+  # Data quality checks
+  check_data_continuity: true      # Check for gaps in time series
+  check_data_quality: true        # Check for outliers/anomalies
+  min_data_points_per_day: 50     # Minimum data points per day
+  
+  # Model validation
+  validate_model_performance: true # Check model sanity
+  min_train_val_samples: 1000     # Minimum samples for valid split
+  temporal_split_validation: true  # Validate temporal split correctness
+
+# Advanced features
+advanced:
+  # Ensemble options (future)
+  ensemble_enabled: false
+  ensemble_models: []
+  
+  # Transfer learning (future)
+  transfer_learning: false
+  pretrained_model_path: null
+  
+  # Model checkpointing
+  checkpoint_enabled: true
+  checkpoint_frequency: 20        # Save checkpoint every N epochs
+  keep_best_only: true           # Only keep best performing model
+  
+  # Early stopping enhancements
+  early_stopping_restore_best: true
+  early_stopping_verbose: true
+
+# Resource management
+resources:
+  max_memory_gb: 16               # Maximum memory usage
+  max_training_time_hours: 12     # Maximum training time
+  gpu_memory_fraction: 0.8       # GPU memory usage limit
+  
+  # Parallel processing
+  num_workers: 4                 # Data loader workers
+  prefetch_factor: 2             # Prefetch batches
+  pin_memory: true               # Faster GPU transfer
+
+# Security and data protection
+security:
+  data_anonymization: false      # Anonymize sensitive data
+  model_encryption: false        # Encrypt saved models
+  audit_logging: true           # Log all operations
+  
+  # Access control
+  require_authentication: false
+  api_key_rotation: false
+
+# Debugging and development
+debug:
+  enabled: false                 # Debug mode
+  verbose_logging: false         # Extra verbose output
+  save_intermediate_results: false # Save intermediate data
+  profiling_enabled: false      # Performance profiling
+  
+  # Testing options
+  dry_run: false                # Test without actual training
+  sample_data_only: false       # Use small data sample for testing
+  skip_signal_generation: false # Skip signal generation for testing

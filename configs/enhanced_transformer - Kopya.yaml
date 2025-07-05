@@ -1,0 +1,57 @@
+system:
+  name: "Enhanced Transformer System"
+  version: "2.0.0"
+  model_type: "enhanced_transformer"  # CLI için gerekli
+
+data:
+  granularity: "M15"
+  lookback_candles: 25000
+  sequence_length: 128
+  cache_enabled: true
+
+model:
+  type: "enhanced_transformer"
+  target_mode: "binary"
+  use_focal_loss: false  # Weighted BCE kullanıyoruz
+  dropout_rate: 0.1
+
+# Enhanced Transformer specific config - FIXED
+transformer:
+  d_model: 256        # 128 → 256 (arttırıldı)
+  nhead: 16          # 12 → 16 FIXED (256 % 16 = 0 ✅)
+  num_layers: 6      # 4 → 6 (arttırıldı)
+  ff_dim: 512        # 256 → 512 (arttırıldı)
+  max_seq_len: 128   # sequence_length ile eşleşmeli
+
+training:
+  epochs: 30
+  batch_size: 16     # Transformer için küçük batch
+  learning_rate: 2e-4  # Düşük LR
+  patience: 10
+  weight_decay: 0.01
+  use_smote: false
+  
+  # Scheduler configuration
+  scheduler: "CosineAnnealingWarmRestarts"
+  warmup_steps: 500  # warmup_epochs yerine steps
+  gradient_clip: 0.5
+
+# API configuration (OANDA)
+api:
+  api_key: "8d8619f4119fec7e59d73c61b76b480d-d0947fd967a22401c1e48bc1516ad0eb"
+  account_id: "101-004-35700665-002"
+  environment: "practice"
+
+# Output configuration
+output:
+  save_models: true
+  save_plots: true
+  base_directory: "results"
+
+# MLflow tracking
+logging:
+  level: "INFO"
+  mlflow:
+    enabled: true
+    experiment_name: "Enhanced_Transformer_Forex"
+    uri: "file:./mlruns"

@@ -1,0 +1,42 @@
+[project]
+name = "lstm_project"
+version = "1.0.0"
+description = "Modular Multi-Pair LSTM System for Forex Prediction"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "torch>=1.10.0",
+    "pandas>=1.3.0",
+    "numpy>=1.21.0",
+    "scikit-learn>=1.0.0",
+    "imbalanced-learn>=0.8.0",
+    "optuna>=3.0.0",
+    "matplotlib>=3.5.0",
+    "pyyaml>=6.0",
+    "requests>=2.25.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "black>=22.0",
+    "flake8>=4.0",
+    "mypy>=0.950"
+]
+
+[project.scripts]
+lstm-train = "src.cli:main"
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
