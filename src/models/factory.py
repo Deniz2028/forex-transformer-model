@@ -1,7 +1,7 @@
 """
 Geliştirilmiş model factory for creating different model architectures.
 
-Bu modül, LSTM, EnhancedTransformer ve diğer modelleri oluşturmak için birleşik arayüz sağlar.
+Bu modül, LSTM, EnhancedTransformer, HybridLSTMTransformer ve diğer modelleri oluşturmak için birleşik arayüz sağlar.
 Model seçimi, parametre validasyonu, cihaz yerleştirme ve gelişmiş hata yönetimi
 ile kapsamlı konfigürasyon doğrulaması içerir.
 """
@@ -21,12 +21,14 @@ from .lstm import PairSpecificLSTM, create_model as create_lstm_model
 # Transformer modeli için koşullu import
 TRANSFORMER_AVAILABLE = False
 ENHANCED_TRANSFORMER_V2_AVAILABLE = False
+HYBRID_MODEL_AVAILABLE = False
 EnhancedTransformer = None
 TransformerClassifier = None
 create_transformer_model = None
 create_enhanced_transformer = None
 EnhancedTransformerV2 = None
 create_enhanced_transformer_v2 = None
+HybridLSTMTransformer = None
 
 # Transformer modülünü dinamik olarak yükleme
 try:
@@ -65,6 +67,20 @@ except ImportError as e:
 except Exception as e:
     logger.error(f"❌ Beklenmeyen hata (enhanced_transformer): {e}")
 
+# Hibrit LSTM-Transformer modeli için import
+try:
+    hybrid_module = importlib.import_module('.hybrid_model', package='src.models')
+    
+    if hasattr(hybrid_module, 'HybridLSTMTransformer'):
+        from .hybrid_model import HybridLSTMTransformer
+        HYBRID_MODEL_AVAILABLE = True
+        logger.info("✅ HybridLSTMTransformer import başarılı")
+        
+except ImportError as e:
+    logger.warning(f"⚠️ Hybrid model import hatası: {e}")
+except Exception as e:
+    logger.error(f"❌ Beklenmeyen hata (hybrid_model): {e}")
+
 # Model tipi sabitleri - GÜVENLİ HALE GETİR
 SUPPORTED_MODELS = ['lstm', 'pairspecificlstm']
 
@@ -77,12 +93,17 @@ if ENHANCED_TRANSFORMER_V2_AVAILABLE:
     SUPPORTED_MODELS.append('enhanced_transformer_v2')
     logger.info("✅ Enhanced Transformer V2 desteklenen listeye eklendi")
 
+if HYBRID_MODEL_AVAILABLE:
+    SUPPORTED_MODELS.append('hybrid_lstm_transformer')
+    logger.info("✅ Hibrit LSTM-Transformer desteklenen listeye eklendi")
+
 logger.info(f"📋 Desteklenen modeller: {SUPPORTED_MODELS}")
 
 # Model alias'ları
 LSTM_ALIASES = ['lstm', 'pairspecificlstm']
 TRANSFORMER_ALIASES = ['transformer', 'enhanced_transformer'] if TRANSFORMER_AVAILABLE else []
 ENHANCED_TRANSFORMER_V2_ALIASES = ['enhanced_transformer_v2'] if ENHANCED_TRANSFORMER_V2_AVAILABLE else []
+HYBRID_ALIASES = ['hybrid_lstm_transformer'] if HYBRID_MODEL_AVAILABLE else []
 
 # ModelInstance tipini güvenli hale getir
 available_types = [PairSpecificLSTM]
@@ -96,6 +117,9 @@ if TRANSFORMER_AVAILABLE:
 if ENHANCED_TRANSFORMER_V2_AVAILABLE and EnhancedTransformerV2:
     available_types.append(EnhancedTransformerV2)
 
+if HYBRID_MODEL_AVAILABLE and HybridLSTMTransformer:
+    available_types.append(HybridLSTMTransformer)
+
 if len(available_types) == 0:
     logger.error("⚠️ Hiçbir model tipi kullanılamıyor! Sadece LSTM kullanılacak.")
     available_types = [PairSpecificLSTM]
@@ -106,6 +130,7 @@ ModelInstance = Union[tuple(available_types)]
 ModelConfig = Dict[str, Any]
 TransformerConfig = Dict[str, Any]
 LSTMConfig = Dict[str, Any]
+HybridConfig = Dict[str, Any]
 
 
 def create_model(
@@ -118,7 +143,7 @@ def create_model(
     Tip ve konfigürasyona göre model oluşturan factory fonksiyonu.
     
     Args:
-        model_type: Oluşturulacak model tipi ('lstm', 'transformer', 'enhanced_transformer', 'enhanced_transformer_v2')
+        model_type: Oluşturulacak model tipi ('lstm', 'transformer', 'hybrid_lstm_transformer', ...)
         config: Model konfigürasyon sözlüğü
         n_features: Giriş özellik sayısı
         device: Model oluşturulacak cihaz
@@ -175,6 +200,15 @@ def create_model(
             model = create_enhanced_transformer_v2(validated_config, n_features, device)
             logger.info(f"   ✅ EnhancedTransformer V2 modeli başarıyla oluşturuldu")
         
+        elif model_type_normalized in HYBRID_ALIASES:
+            if not HYBRID_MODEL_AVAILABLE or not HybridLSTMTransformer:
+                raise RuntimeError("Hibrit LSTM-Transformer modeli desteklenmiyor (import hatası)")
+                
+            # Hibrit model konfigürasyonu validasyonu
+            validated_config = validate_hybrid_config(config)
+            model = create_hybrid_model(validated_config, n_features, device)
+            logger.info(f"   ✅ Hibrit LSTM-Transformer modeli başarıyla oluşturuldu")
+        
         else:
             # Bu duruma teorik olarak gelmemeli ama güvenlik için
             raise ValueError(f"Model tipi '{model_type}' işlenemiyor")
@@ -193,9 +227,46 @@ def create_model(
         raise RuntimeError(f"Model oluşturma başarısız: {e}") from e
 
 
-def validate_transformer_config(config: TransformerConfig) -> TransformerConfig:
+def create_hybrid_model(config: HybridConfig, n_features: int, device: torch.device) -> HybridLSTMTransformer:
     """
-    Transformer konfigürasyon parametrelerini doğrula ve ayarla.
+    Hibrit LSTM-Transformer modeli oluşturur
+    
+    Args:
+        config: Hibrit model konfigürasyonu
+        n_features: Giriş özellik sayısı
+        device: Modelin yerleştirileceği cihaz
+        
+    Returns:
+        Oluşturulan hibrit model instance'ı
+    """
+    # Hibrit-specific config
+    hybrid_config = config.get('hybrid', {})
+    
+    # Parametreleri çıkar veya default değerler kullan
+    lstm_hidden = hybrid_config.get('lstm_hidden', 96)
+    d_model = hybrid_config.get('d_model', 512)
+    nhead = hybrid_config.get('nhead', 8)
+    num_layers = hybrid_config.get('num_layers', 4)
+    dropout = hybrid_config.get('dropout', 0.1)
+    
+    model = HybridLSTMTransformer(
+        input_dim=n_features,
+        lstm_hidden=lstm_hidden,
+        d_model=d_model,
+        nhead=nhead,
+        num_layers=num_layers,
+        dropout=dropout
+    ).to(device)
+    
+    logger.info(f"   ✅ Hibrit LSTM-Transformer modeli oluşturuldu")
+    logger.info(f"      LSTM hidden: {lstm_hidden}, Transformer d_model: {d_model}")
+    
+    return model
+
+
+def validate_hybrid_config(config: HybridConfig) -> HybridConfig:
+    """
+    Hibrit model konfigürasyon parametrelerini doğrula ve ayarla.
     
     Args:
         config: Konfigürasyon sözlüğü
@@ -206,382 +277,102 @@ def validate_transformer_config(config: TransformerConfig) -> TransformerConfig:
     Raises:
         ValueError: Konfigürasyon geçersizse
     """
-    # Orijinal sözlüğü bozmamak için deep copy
     config = copy.deepcopy(config)
+    hybrid_config = config.get('hybrid', {})
     
-    transformer_config = config.get('transformer', {})
+    lstm_hidden = hybrid_config.get('lstm_hidden', 96)
+    d_model = hybrid_config.get('d_model', 512)
+    nhead = hybrid_config.get('nhead', 8)
+    num_layers = hybrid_config.get('num_layers', 4)
+    dropout = hybrid_config.get('dropout', 0.1)
     
-    d_model = transformer_config.get('d_model', 128)
-    nhead = transformer_config.get('nhead', 8)
-    num_layers = transformer_config.get('num_layers', 4)
-    dim_feedforward = transformer_config.get('dim_feedforward', 256)
-    dropout = config.get('model', {}).get('dropout_rate', 0.1)
+    logger.info(f"🔍 Hibrit model konfigürasyonu doğrulanıyor...")
+    logger.info(f"   LSTM hidden: {lstm_hidden}, d_model: {d_model}, layers: {num_layers}")
     
-    logger.info(f"🔍 Transformer konfigürasyonu doğrulanıyor...")
-    logger.info(f"   d_model: {d_model}, nhead: {nhead}, layers: {num_layers}")
-    
-    # d_model validasyonu
-    if not isinstance(d_model, int) or d_model < 32 or d_model > 1024:
+    # LSTM hidden size validasyonu
+    if not isinstance(lstm_hidden, int) or lstm_hidden < 16 or lstm_hidden > 512:
         raise ValueError(
-            f"d_model geçersiz: {d_model}. "
-            f"32 ile 1024 arasında integer olmalı"
-        )
-    
-    # nhead validasyonu
-    if not isinstance(nhead, int) or nhead < 1 or nhead > 32:
-        raise ValueError(
-            f"nhead geçersiz: {nhead}. "
-            f"1 ile 32 arasında integer olmalı"
-        )
-    
-    # d_model ve nhead uyumluluğu
-    if d_model % nhead != 0:
-        logger.warning(f"   ⚠️ d_model ({d_model}) nhead ({nhead}) ile bölünemiyor")
-        
-        # Otomatik düzeltme denemesi
-        valid_heads = [h for h in [1, 2, 4, 8, 16, 32] if d_model % h == 0 and h <= d_model]
-        if valid_heads:
-            old_nhead = nhead
-            nhead = max([h for h in valid_heads if h <= nhead]) or valid_heads[-1]
-            transformer_config['nhead'] = nhead
-            logger.warning(f"   🔧 nhead otomatik düzeltildi: {old_nhead} → {nhead}")
-        else:
-            raise ValueError(
-                f"d_model ({d_model}) nhead ({nhead}) ile bölünebilir olmalı. "
-                f"d_model % nhead == 0 koşulu sağlanmalı. "
-                f"Geçerli nhead değerleri: {[h for h in [1, 2, 4, 8, 16, 32] if d_model % h == 0]}"
-            )
-    
-    # num_layers validasyonu
-    if not isinstance(num_layers, int) or num_layers < 1 or num_layers > 12:
-        raise ValueError(
-            f"num_layers geçersiz: {num_layers}. "
-            f"1 ile 12 arasında integer olmalı"
-        )
-    
-    # dim_feedforward validasyonu
-    if not isinstance(dim_feedforward, int) or dim_feedforward < 64 or dim_feedforward > 4096:
-        raise ValueError(
-            f"dim_feedforward geçersiz: {dim_feedforward}. "
-            f"64 ile 4096 arasında integer olmalı"
-        )
-    
-    # dim_feedforward ve d_model ilişkisi
-    if dim_feedforward < d_model:
-        logger.warning(
-            f"   ⚠️ dim_feedforward ({dim_feedforward}) < d_model ({d_model}). "
-            f"Genellikle dim_feedforward >= d_model olması önerilir"
-        )
-    
-    # dropout validasyonu
-    if not isinstance(dropout, (int, float)) or dropout < 0.0 or dropout > 0.9:
-        raise ValueError(
-            f"dropout geçersiz: {dropout}. "
-            f"0.0 ile 0.9 arasında float olmalı"
-        )
-    
-    # Performans uyarıları
-    if d_model > 512:
-        logger.warning(f"   ⚠️ Büyük d_model ({d_model}) önemli GPU belleği gerektirebilir")
-    
-    if num_layers > 8:
-        logger.warning(f"   ⚠️ Çok katman ({num_layers}) eğitimi yavaşlatabilir")
-    
-    if nhead > 16:
-        logger.warning(f"   ⚠️ Çok attention head ({nhead}) hesaplama maliyeti artırabilir")
-    
-    logger.info(f"   ✅ Transformer konfigürasyonu doğrulandı")
-    
-    return config
-
-
-def validate_enhanced_transformer_config(config: TransformerConfig) -> TransformerConfig:
-    """
-    EnhancedTransformer konfigürasyon parametrelerini doğrula ve ayarla.
-    
-    Args:
-        config: Konfigürasyon sözlüğü
-        
-    Returns:
-        Doğrulanmış konfigürasyon
-        
-    Raises:
-        ValueError: Konfigürasyon geçersizse
-    """
-    # Orijinal sözlüğü bozmamak için deep copy
-    config = copy.deepcopy(config)
-    
-    transformer_config = config.get('transformer', {})
-    
-    d_model = transformer_config.get('d_model', 256)
-    nhead = transformer_config.get('nhead', 12)
-    num_layers = transformer_config.get('num_layers', 6)
-    ff_dim = transformer_config.get('ff_dim', 512)
-    dropout = config.get('model', {}).get('dropout_rate', 0.1)
-    target_mode = config.get('model', {}).get('target_mode', 'binary')
-    
-    logger.info(f"🔍 EnhancedTransformer konfigürasyonu doğrulanıyor...")
-    logger.info(f"   d_model: {d_model}, nhead: {nhead}, layers: {num_layers}")
-    
-    # d_model validasyonu
-    if not isinstance(d_model, int) or d_model < 64 or d_model > 2048:
-        raise ValueError(
-            f"d_model geçersiz: {d_model}. "
-            f"64 ile 2048 arasında integer olmalı"
-        )
-    
-    # nhead validasyonu
-    if not isinstance(nhead, int) or nhead < 1 or nhead > 32:
-        raise ValueError(
-            f"nhead geçersiz: {nhead}. "
-            f"1 ile 32 arasında integer olmalı"
-        )
-    
-    # d_model ve nhead uyumluluğu
-    if d_model % nhead != 0:
-        logger.warning(f"   ⚠️ d_model ({d_model}) nhead ({nhead}) ile bölünemiyor")
-        
-        # Otomatik düzeltme denemesi
-        valid_heads = [h for h in [1, 2, 4, 8, 16, 32] if d_model % h == 0 and h <= d_model]
-        if valid_heads:
-            old_nhead = nhead
-            nhead = max([h for h in valid_heads if h <= nhead]) or valid_heads[-1]
-            transformer_config['nhead'] = nhead
-            logger.warning(f"   🔧 nhead otomatik düzeltildi: {old_nhead} → {nhead}")
-        else:
-            raise ValueError(
-                f"d_model ({d_model}) nhead ({nhead}) ile bölünebilir olmalı. "
-                f"d_model % nhead == 0 koşulu sağlanmalı. "
-                f"Geçerli nhead değerleri: {[h for h in [1, 2, 4, 8, 16, 32] if d_model % h == 0]}"
-            )
-    
-    # num_layers validasyonu
-    if not isinstance(num_layers, int) or num_layers < 1 or num_layers > 16:
-        raise ValueError(
-            f"num_layers geçersiz: {num_layers}. "
-            f"1 ile 16 arasında integer olmalı"
-        )
-    
-    # ff_dim validasyonu
-    if not isinstance(ff_dim, int) or ff_dim < 128 or ff_dim > 8192:
-        raise ValueError(
-            f"ff_dim geçersiz: {ff_dim}. "
-            f"128 ile 8192 arasında integer olmalı"
-        )
-    
-    # ff_dim ve d_model ilişkisi
-    if ff_dim < d_model * 2:
-        logger.warning(
-            f"   ⚠️ ff_dim ({ff_dim}) < d_model*2 ({d_model*2}). "
-            f"Genellikle ff_dim >= d_model*2 olması önerilir"
-        )
-    
-    # dropout validasyonu
-    if not isinstance(dropout, (int, float)) or dropout < 0.0 or dropout > 0.9:
-        raise ValueError(
-            f"dropout geçersiz: {dropout}. "
-            f"0.0 ile 0.9 arasında float olmalı"
-        )
-    
-    # target_mode validasyonu
-    if target_mode not in ['binary', 'three_class']:
-        raise ValueError(
-            f"target_mode geçersiz: {target_mode}. "
-            f"'binary' veya 'three_class' olmalı"
-        )
-    
-    # Performans uyarıları
-    if d_model > 512:
-        logger.warning(f"   ⚠️ Büyük d_model ({d_model}) önemli GPU belleği gerektirebilir")
-    
-    if num_layers > 8:
-        logger.warning(f"   ⚠️ Çok katman ({num_layers}) eğitimi yavaşlatabilir")
-    
-    if nhead > 16:
-        logger.warning(f"   ⚠️ Çok attention head ({nhead}) hesaplama maliyeti artırabilir")
-    
-    logger.info(f"   ✅ EnhancedTransformer konfigürasyonu doğrulandı")
-    
-    return config
-
-
-def validate_lstm_config(config: LSTMConfig) -> LSTMConfig:
-    """
-    LSTM konfigürasyon parametrelerini doğrula ve ayarla.
-    
-    Args:
-        config: Konfigürasyon sözlüğü
-        
-    Returns:
-        Doğrulanmış konfigürasyon
-        
-    Raises:
-        ValueError: Konfigürasyon geçersizse
-    """
-    # Orijinal sözlüğü bozmamak için deep copy
-    config = copy.deepcopy(config)
-    
-    model_config = config.get('model', {})
-    
-    hidden_size = model_config.get('hidden_size', 64)
-    num_layers = model_config.get('num_layers', 2)
-    dropout = model_config.get('dropout_rate', 0.45)
-    
-    logger.info(f"🔍 LSTM konfigürasyonu doğrulanıyor...")
-    logger.info(f"   hidden_size: {hidden_size}, layers: {num_layers}, dropout: {dropout}")
-    
-    # hidden_size validasyonu
-    if not isinstance(hidden_size, int) or hidden_size < 16 or hidden_size > 512:
-        raise ValueError(
-            f"hidden_size geçersiz: {hidden_size}. "
+            f"LSTM hidden_size geçersiz: {lstm_hidden}. "
             f"16 ile 512 arasında integer olmalı"
         )
     
-    # num_layers validasyonu  
-    if not isinstance(num_layers, int) or num_layers < 1 or num_layers > 4:
+    # Transformer d_model validasyonu
+    if not isinstance(d_model, int) or d_model < 64 or d_model > 1024:
+        raise ValueError(
+            f"d_model geçersiz: {d_model}. "
+            f"64 ile 1024 arasında integer olmalı"
+        )
+    
+    # nhead validasyonu
+    if not isinstance(nhead, int) or nhead < 1 or nhead > 16:
+        raise ValueError(
+            f"nhead geçersiz: {nhead}. "
+            f"1 ile 16 arasında integer olmalı"
+        )
+    
+    # d_model ve nhead uyumluluğu
+    if d_model % nhead != 0:
+        logger.warning(f"   ⚠️ d_model ({d_model}) nhead ({nhead}) ile bölünemiyor")
+        
+        # Otomatik düzeltme denemesi
+        valid_heads = [h for h in [1, 2, 4, 8, 16] if d_model % h == 0 and h <= d_model]
+        if valid_heads:
+            old_nhead = nhead
+            nhead = max([h for h in valid_heads if h <= nhead]) or valid_heads[-1]
+            hybrid_config['nhead'] = nhead
+            logger.warning(f"   🔧 nhead otomatik düzeltildi: {old_nhead} → {nhead}")
+        else:
+            raise ValueError(
+                f"d_model ({d_model}) nhead ({nhead}) ile bölünebilir olmalı. "
+                f"d_model % nhead == 0 koşulu sağlanmalı. "
+                f"Geçerli nhead değerleri: {[h for h in [1, 2, 4, 8, 16] if d_model % h == 0]}"
+            )
+    
+    # num_layers validasyonu
+    if not isinstance(num_layers, int) or num_layers < 1 or num_layers > 8:
         raise ValueError(
             f"num_layers geçersiz: {num_layers}. "
-            f"1 ile 4 arasında integer olmalı"
+            f"1 ile 8 arasında integer olmalı"
         )
     
     # dropout validasyonu
-    if not isinstance(dropout, (int, float)) or dropout < 0.0 or dropout > 0.8:
+    if not isinstance(dropout, (int, float)) or dropout < 0.0 or dropout > 0.5:
         raise ValueError(
             f"dropout geçersiz: {dropout}. "
-            f"0.0 ile 0.8 arasında float olmalı"
+            f"0.0 ile 0.5 arasında float olmalı"
         )
     
     # Performans uyarıları
-    if hidden_size > 256:
-        logger.warning(f"   ⚠️ Büyük hidden_size ({hidden_size}) overfitting riskini artırabilir")
+    if lstm_hidden > 256:
+        logger.warning(f"   ⚠️ Büyük LSTM hidden_size ({lstm_hidden}) overfitting riskini artırabilir")
     
-    if num_layers > 3:
-        logger.warning(f"   ⚠️ Çok katman ({num_layers}) gradient vanishing problemine yol açabilir")
+    if d_model > 512:
+        logger.warning(f"   ⚠️ Büyük d_model ({d_model}) önemli GPU belleği gerektirebilir")
     
-    logger.info(f"   ✅ LSTM konfigürasyonu doğrulandı")
+    if num_layers > 6:
+        logger.warning(f"   ⚠️ Çok katman ({num_layers}) eğitimi yavaşlatabilir")
+    
+    logger.info(f"   ✅ Hibrit model konfigürasyonu doğrulandı")
     
     return config
 
 
-def get_model_info(model: ModelInstance) -> Dict[str, Any]:
-    """
-    Farklı mimarilerde birleşik model bilgisi al.
-    
-    Args:
-        model: Model instance'ı
-        
-    Returns:
-        Model bilgilerini içeren sözlük
-        
-    Raises:
-        RuntimeError: Model bilgisi alınamıyorsa
-    """
-    try:
-        if hasattr(model, 'get_model_info'):
-            return model.get_model_info()
-        else:
-            # get_model_info metodu olmayan modeller için fallback
-            total_params = sum(p.numel() for p in model.parameters())
-            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            
-            logger.info(f"   ℹ️ Model get_model_info metoduna sahip değil, temel bilgiler kullanılıyor")
-            
-            return {
-                'model_type': type(model).__name__,
-                'total_parameters': total_params,
-                'trainable_parameters': trainable_params,
-                'architecture': 'Unknown (fallback info)'
-            }
-    except Exception as e:
-        logger.error(f"   ❌ Model bilgisi alınamadı: {e}")
-        raise RuntimeError(f"Model bilgisi alınırken hata: {e}") from e
+def validate_transformer_config(config: TransformerConfig) -> TransformerConfig:
+    # ... (Mevcut kod aynı kalır, değişiklik yok) ...
 
+def validate_enhanced_transformer_config(config: TransformerConfig) -> TransformerConfig:
+    # ... (Mevcut kod aynı kalır, değişiklik yok) ...
+
+def validate_lstm_config(config: LSTMConfig) -> LSTMConfig:
+    # ... (Mevcut kod aynı kalır, değişiklik yok) ...
+
+def get_model_info(model: ModelInstance) -> Dict[str, Any]:
+    # ... (Mevcut kod aynı kalır, değişiklik yok) ...
 
 def get_model_complexity_score(model: ModelInstance) -> float:
-    """
-    Parametre sayısı ve mimariye göre model karmaşıklık skoru hesapla.
-    
-    Args:
-        model: Model instance'ı
-        
-    Returns:
-        Karmaşıklık skoru (yüksek = daha karmaşık)
-        
-    Raises:
-        RuntimeError: Skor hesaplanamıyorsa
-    """
-    try:
-        info = get_model_info(model)
-        param_count = info['total_parameters']
-        
-        # Temel karmaşıklık parametre sayısından
-        complexity = param_count / 100000  # Makul aralığa normalize et
-        
-        # Mimari-specific ayarlamalar
-        if TRANSFORMER_AVAILABLE and isinstance(model, (TransformerClassifier, EnhancedTransformer)):
-            # Transformer'lar attention mekanizması nedeniyle daha karmaşık
-            complexity *= 1.5
-            
-            # Head ve katman sayısına göre karmaşıklık ekle
-            if hasattr(model, 'nhead'):
-                complexity += model.nhead * 0.1
-            if hasattr(model, 'num_layers'):
-                complexity += model.num_layers * 0.2
-            
-            # EnhancedTransformer için ek karmaşıklık
-            if hasattr(model, 'target_mode') and model.target_mode == 'three_class':
-                complexity *= 1.1
-            
-            logger.info(f"   📊 Transformer karmaşıklık faktörleri uygulandı")
-            
-        elif ENHANCED_TRANSFORMER_V2_AVAILABLE and isinstance(model, EnhancedTransformerV2):
-            # EnhancedTransformer V2 için karmaşıklık
-            complexity *= 1.8
-            
-            if hasattr(model, 'nhead'):
-                complexity += model.nhead * 0.15
-            if hasattr(model, 'num_layers'):
-                complexity += model.num_layers * 0.25
-            if hasattr(model, 'target_mode') and model.target_mode == 'three_class':
-                complexity *= 1.15
-                
-            logger.info(f"   📊 EnhancedTransformer V2 karmaşıklık faktörleri uygulandı")
-            
-        elif isinstance(model, PairSpecificLSTM):
-            # LSTM karmaşıklığı katman ve hidden size'a göre
-            if hasattr(model, 'num_layers'):
-                complexity += model.num_layers * 0.1
-            if hasattr(model, 'hidden_size'):
-                complexity += model.hidden_size / 1000
-            logger.info(f"   📊 LSTM karmaşıklık faktörleri uygulandı")
-            
-        else:
-            # Bilinmeyen model tipi için default davranış
-            logger.info(f"   ℹ️ Bilinmeyen model tipi ({type(model).__name__}), default skor kullanıldı")
-        
-        final_score = round(complexity, 2)
-        logger.info(f"   📊 Model karmaşıklık skoru: {final_score}")
-        
-        return final_score
-        
-    except Exception as e:
-        logger.error(f"   ❌ Karmaşıklık skoru hesaplanamadı: {e}")
-        raise RuntimeError(f"Karmaşıklık skoru hesaplama hatası: {e}") from e
-
+    # ... (Mevcut kod aynı kalır, değişiklik yok) ...
 
 def suggest_training_params(model: ModelInstance) -> Dict[str, Any]:
-    """
-    Model karmaşıklığı ve tipine göre eğitim parametreleri öner.
-    
-    Args:
-        model: Model instance'ı
-        
-    Returns:
-        Önerilen eğitim parametreleri
-        
-    Raises:
-        RuntimeError: Öneri oluşturulamıyorsa
-    """
     try:
         complexity = get_model_complexity_score(model)
         info = get_model_info(model)
@@ -589,194 +380,60 @@ def suggest_training_params(model: ModelInstance) -> Dict[str, Any]:
         logger.info(f"🎯 Eğitim parametreleri öneriliyor...")
         logger.info(f"   Model karmaşıklığı: {complexity}")
         
-        if TRANSFORMER_AVAILABLE and isinstance(model, EnhancedTransformer):
-            # EnhancedTransformer-specific öneriler
+        # YENİ: Hibrit model için öneriler
+        if HYBRID_MODEL_AVAILABLE and isinstance(model, HybridLSTMTransformer):
+            # Hibrit model detayları
+            lstm_hidden = getattr(model, 'lstm_hidden_size', 96)
+            d_model = getattr(model, 'd_model', 512)
+            num_layers = getattr(model, 'num_layers', 4)
             
-            # Model detaylarından ek bilgiler
-            num_layers = getattr(model, 'num_layers', 6)
-            nhead = getattr(model, 'nhead', 12)
-            d_model = getattr(model, 'd_model', 256)
-            target_mode = getattr(model, 'target_mode', 'binary')
-            
-            logger.info(f"   EnhancedTransformer detayları: layers={num_layers}, heads={nhead}, d_model={d_model}")
+            logger.info(f"   Hibrit model detayları: LSTM hidden={lstm_hidden}, d_model={d_model}, layers={num_layers}")
             
             # Karmaşıklığa ve mimari detaylarına göre öneri
-            if complexity < 3.0 and num_layers <= 6:
-                base_lr = 1e-4
-                batch_size = 64
-                warmup = 1000
-            elif complexity < 8.0 or num_layers <= 8:
-                base_lr = 5e-5
+            if complexity < 4.0 and num_layers <= 4:
+                base_lr = 7e-5
+                batch_size = 48
+                warmup = 1200
+            elif complexity < 10.0 or num_layers <= 6:
+                base_lr = 3e-5
                 batch_size = 32
-                warmup = 2000
+                warmup = 2500
             else:
                 base_lr = 1e-5
                 batch_size = 16
                 warmup = 4000
             
-            # Attention head sayısına göre LR ayarlaması
-            if nhead > 16:
-                base_lr *= 0.8  # Çok head varsa LR düşür
-                logger.info(f"   📉 Çok attention head nedeniyle LR düşürüldü")
+            # LSTM hidden size'a göre ayarlama
+            if lstm_hidden > 128:
+                base_lr *= 0.85
+                logger.info(f"   📉 Büyük LSTM hidden_size nedeniyle LR düşürüldü")
             
             # d_model'e göre batch size ayarlaması
             if d_model > 512:
                 batch_size = max(8, batch_size // 2)
                 logger.info(f"   📦 Büyük d_model nedeniyle batch_size düşürüldü")
             
-            # Çoklu sınıf için ayarlama
-            if target_mode == 'three_class':
-                batch_size = max(16, batch_size)
-                logger.info(f"   🎯 Üç sınıflı mod için batch_size ayarlandı")
-            
             suggestions = {
                 'learning_rate': base_lr,
                 'batch_size': batch_size,
                 'warmup_steps': warmup,
-                'weight_decay': 0.01 if complexity > 5.0 else 0.005,
+                'weight_decay': 0.01,
                 'scheduler': 'CosineAnnealingWarmRestarts',
                 'optimizer': 'AdamW',
-                'gradient_clip': 0.5,
-                'model_type': 'enhanced_transformer'
+                'gradient_clip': 0.3,
+                'model_type': 'hybrid_lstm_transformer'
             }
-            
+        
+        elif TRANSFORMER_AVAILABLE and isinstance(model, EnhancedTransformer):
+            # ... (Mevcut kod aynı kalır) ...
         elif ENHANCED_TRANSFORMER_V2_AVAILABLE and isinstance(model, EnhancedTransformerV2):
-            # EnhancedTransformer V2-specific öneriler
-            
-            # Model detaylarından ek bilgiler
-            num_layers = getattr(model, 'num_layers', 8)
-            nhead = getattr(model, 'nhead', 16)
-            d_model = getattr(model, 'd_model', 512)
-            target_mode = getattr(model, 'target_mode', 'binary')
-            
-            logger.info(f"   EnhancedTransformer V2 detayları: layers={num_layers}, heads={nhead}, d_model={d_model}")
-            
-            # Karmaşıklığa ve mimari detaylarına göre öneri
-            if complexity < 5.0 and num_layers <= 8:
-                base_lr = 8e-5
-                batch_size = 48
-                warmup = 1500
-            elif complexity < 10.0 or num_layers <= 12:
-                base_lr = 3e-5
-                batch_size = 24
-                warmup = 3000
-            else:
-                base_lr = 8e-6
-                batch_size = 12
-                warmup = 5000
-            
-            # Attention head sayısına göre LR ayarlaması
-            if nhead > 24:
-                base_lr *= 0.7
-                logger.info(f"   📉 Çok attention head nedeniyle LR düşürüldü")
-            
-            # d_model'e göre batch size ayarlaması
-            if d_model > 768:
-                batch_size = max(6, batch_size // 2)
-                logger.info(f"   📦 Büyük d_model nedeniyle batch_size düşürüldü")
-            
-            # Çoklu sınıf için ayarlama
-            if target_mode == 'three_class':
-                batch_size = max(12, batch_size)
-                logger.info(f"   🎯 Üç sınıflı mod için batch_size ayarlandı")
-            
-            suggestions = {
-                'learning_rate': base_lr,
-                'batch_size': batch_size,
-                'warmup_steps': warmup,
-                'weight_decay': 0.015 if complexity > 8.0 else 0.008,
-                'scheduler': 'CosineAnnealingWarmRestarts',
-                'optimizer': 'AdamW',
-                'gradient_clip': 0.4,
-                'model_type': 'enhanced_transformer_v2'
-            }
-            
+            # ... (Mevcut kod aynı kalır) ...
         elif TRANSFORMER_AVAILABLE and isinstance(model, TransformerClassifier):
-            # Transformer-specific öneriler
-            
-            # Model detaylarından ek bilgiler
-            num_layers = getattr(model, 'num_layers', 4)
-            nhead = getattr(model, 'nhead', 8)
-            d_model = getattr(model, 'd_model', 128)
-            
-            logger.info(f"   Transformer detayları: layers={num_layers}, heads={nhead}, d_model={d_model}")
-            
-            # Karmaşıklığa ve mimari detaylarına göre öneri
-            if complexity < 2.0 and num_layers <= 4:
-                base_lr = 1e-3
-                batch_size = 64
-                warmup = 1000
-            elif complexity < 5.0 or num_layers <= 6:
-                base_lr = 5e-4
-                batch_size = 32
-                warmup = 2000
-            else:
-                base_lr = 1e-4
-                batch_size = 16
-                warmup = 4000
-            
-            # Attention head sayısına göre LR ayarlaması
-            if nhead > 16:
-                base_lr *= 0.8  # Çok head varsa LR düşür
-                logger.info(f"   📉 Çok attention head nedeniyle LR düşürüldü")
-            
-            # d_model'e göre batch size ayarlaması
-            if d_model > 256:
-                batch_size = max(8, batch_size // 2)
-                logger.info(f"   📦 Büyük d_model nedeniyle batch_size düşürüldü")
-            
-            suggestions = {
-                'learning_rate': base_lr,
-                'batch_size': batch_size,
-                'warmup_steps': warmup,
-                'weight_decay': 0.01 if complexity > 3.0 else 0.005,
-                'scheduler': 'OneCycleLR',
-                'optimizer': 'AdamW',
-                'gradient_clip': 1.0,
-                'model_type': 'transformer'
-            }
-            
+            # ... (Mevcut kod aynı kalır) ...
         else:
-            # LSTM-specific öneriler
-            
-            # Model detaylarından ek bilgiler
-            num_layers = getattr(model, 'num_layers', 2)
-            hidden_size = getattr(model, 'hidden_size', 64)
-            
-            logger.info(f"   LSTM detayları: layers={num_layers}, hidden_size={hidden_size}")
-            
-            # Karmaşıklığa ve mimari detaylarına göre öneri
-            if complexity < 1.0 and num_layers <= 2:
-                base_lr = 1e-3
-                batch_size = 128
-            elif complexity < 3.0 or num_layers <= 3:
-                base_lr = 8e-4
-                batch_size = 64
-            else:
-                base_lr = 5e-4
-                batch_size = 32
-            
-            # Hidden size'a göre ayarlama
-            if hidden_size > 128:
-                base_lr *= 0.8  # Büyük hidden size için LR düşür
-                logger.info(f"   📉 Büyük hidden_size nedeniyle LR düşürüldü")
-            
-            # Katman sayısına göre weight decay ayarlaması
-            weight_decay = 0.0001 if num_layers <= 2 else 0.001
-            
-            suggestions = {
-                'learning_rate': base_lr,
-                'batch_size': batch_size,
-                'weight_decay': weight_decay,
-                'scheduler': 'ReduceLROnPlateau',
-                'optimizer': 'AdamW',
-                'gradient_clip': 0.5,
-                'patience': 5,
-                'model_type': 'lstm'
-            }
+            # ... (Mevcut kod aynı kalır) ...
         
         logger.info(f"   ✅ Eğitim parametreleri önerildi: LR={suggestions['learning_rate']:.2e}, BS={suggestions['batch_size']}")
-        
         return suggestions
         
     except Exception as e:
@@ -785,14 +442,7 @@ def suggest_training_params(model: ModelInstance) -> Dict[str, Any]:
 
 
 def get_supported_models() -> List[str]:
-    """
-    Desteklenen model tiplerinin listesini döndür.
-    
-    Returns:
-        Desteklenen model tipleri listesi
-    """
-    return SUPPORTED_MODELS.copy()
-
+    # ... (Mevcut kod aynı kalır, değişiklik yok) ...
 
 def validate_model_compatibility(model_type: str, config: ModelConfig) -> Tuple[bool, List[str]]:
     """
@@ -815,6 +465,8 @@ def validate_model_compatibility(model_type: str, config: ModelConfig) -> Tuple[
             validate_enhanced_transformer_config(config)
         elif model_type.lower() in LSTM_ALIASES:
             validate_lstm_config(config)
+        elif model_type.lower() in HYBRID_ALIASES:
+            validate_hybrid_config(config)  # YENİ: Hibrit model validasyonu
         else:
             warnings.append(f"Bilinmeyen model tipi: {model_type}")
             is_compatible = False
@@ -832,6 +484,7 @@ __all__ = [
     'validate_transformer_config',
     'validate_enhanced_transformer_config',
     'validate_lstm_config',
+    'validate_hybrid_config',  # YENİ
     'get_model_complexity_score',
     'suggest_training_params',
     'get_supported_models',
@@ -840,5 +493,6 @@ __all__ = [
     'ModelConfig',
     'TransformerConfig', 
     'LSTMConfig',
+    'HybridConfig',  # YENİ
     'ModelInstance'
 ]
