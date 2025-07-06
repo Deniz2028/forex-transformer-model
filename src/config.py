@@ -86,4 +86,188 @@ def get_default_config() -> Dict[str, Any]:
         }
     }
 
-__all__ = ['load', 'save', 'get_default_config', 'DEFAULT_CONFIG_PATH']
+# Hibrit model için default konfigürasyon
+DEFAULT_HYBRID_CONFIG = {
+    'lstm_hidden': 96,
+    'd_model': 512,
+    'nhead': 8,
+    'num_layers': 4,
+    'fusion_strategy': 'concat'  # 'concat', 'attention', 'gated'
+}
+
+# Model-specific konfigürasyonlar güncelleme
+def get_model_config(model_type: str, target_mode: str = 'three_class') -> Dict[str, Any]:
+    """Model tipine göre konfigürasyon döndür"""
+    
+    base_config = {
+        'target_mode': target_mode,
+        'model': {
+            'dropout_rate': 0.1,
+        },
+        'training': {
+            'learning_rate': 1e-3,
+            'batch_size': 64,
+            'weight_decay': 1e-4,
+            'scheduler': 'ReduceLROnPlateau',
+            'optimizer': 'AdamW',
+            'patience': 7,
+            'gradient_clip': 0.5
+        }
+    }
+    
+    if model_type == 'lstm' or model_type == 'pairspecificlstm':
+        base_config.update({
+            'model_type': 'lstm',
+            'model': {
+                **base_config['model'],
+                'hidden_size': 64,
+                'num_layers': 2,
+                'dropout_rate': 0.45
+            }
+        })
+        
+    elif model_type == 'transformer':
+        base_config.update({
+            'model_type': 'transformer',
+            'model': {
+                **base_config['model'],
+                'd_model': 256,
+                'nhead': 8,
+                'num_layers': 4,
+                'dropout_rate': 0.1
+            },
+            'training': {
+                **base_config['training'],
+                'learning_rate': 5e-4,
+                'scheduler': 'OneCycleLR',
+                'batch_size': 32
+            }
+        })
+        
+    elif model_type == 'enhanced_transformer':
+        base_config.update({
+            'model_type': 'enhanced_transformer',
+            'model': {
+                **base_config['model'],
+                'd_model': 512,
+                'nhead': 8,
+                'num_layers': 6,
+                'dropout_rate': 0.1
+            },
+            'training': {
+                **base_config['training'],
+                'learning_rate': 3e-4,
+                'scheduler': 'OneCycleLR',
+                'batch_size': 32
+            }
+        })
+        
+    elif model_type == 'hybrid_lstm_transformer' or model_type == 'hybrid':
+        base_config.update({
+            'model_type': 'hybrid_lstm_transformer',
+            'hybrid': DEFAULT_HYBRID_CONFIG,
+            'model': {
+                **base_config['model'],
+                'dropout_rate': 0.1
+            },
+            'training': {
+                **base_config['training'],
+                'learning_rate': 5e-4,
+                'scheduler': 'OneCycleLR',
+                'batch_size': 64,
+                'weight_decay': 1e-4,
+                'gradient_clip': 1.0,
+                'warmup_steps': 500
+            }
+        })
+        
+    return base_config
+
+# CLI argümanları için hibrit model seçenekleri
+def add_hybrid_model_args(parser):
+    """CLI'ye hibrit model argümanları ekle"""
+    parser.add_argument('--fusion_strategy', 
+                       choices=['concat', 'attention', 'gated'],
+                       default='concat',
+                       help='Hibrit model fusion strategy')
+    
+    parser.add_argument('--lstm_hidden', type=int, default=96,
+                       help='LSTM hidden size for hybrid model')
+    
+    parser.add_argument('--transformer_d_model', type=int, default=512,
+                       help='Transformer d_model for hybrid model')
+    
+    parser.add_argument('--transformer_nhead', type=int, default=8,
+                       help='Number of attention heads for hybrid model')
+    
+    parser.add_argument('--transformer_layers', type=int, default=4,
+                       help='Number of transformer layers for hybrid model')
+
+# Test komutları
+TEST_CONFIGS = {
+    'hybrid_quick_test': {
+        'model_type': 'hybrid_lstm_transformer',
+        'target_mode': 'three_class',
+        'hybrid': {
+            'lstm_hidden': 64,
+            'd_model': 256,
+            'nhead': 4,
+            'num_layers': 2,
+            'fusion_strategy': 'concat'
+        },
+        'training': {
+            'learning_rate': 1e-3,
+            'batch_size': 32,
+            'weight_decay': 1e-4
+        }
+    },
+    
+    'hybrid_production': {
+        'model_type': 'hybrid_lstm_transformer',
+        'target_mode': 'three_class',
+        'hybrid': {
+            'lstm_hidden': 128,
+            'd_model': 512,
+            'nhead': 8,
+            'num_layers': 4,
+            'fusion_strategy': 'attention'
+        },
+        'training': {
+            'learning_rate': 3e-4,
+            'batch_size': 64,
+            'weight_decay': 1e-4,
+            'scheduler': 'OneCycleLR',
+            'gradient_clip': 1.0
+        }
+    }
+}
+
+# CLI'den kullanım örnekleri
+EXAMPLE_COMMANDS = {
+    'hybrid_train': [
+        "# Basit hibrit model eğitimi",
+        "python -m src.cli train --model_type hybrid_lstm_transformer \\",
+        "  --granularity M5 --epochs 30 --cache",
+        "",
+        "# Gelişmiş hibrit model (attention fusion)",
+        "python -m src.cli train --model_type hybrid \\", 
+        "  --fusion_strategy attention --lstm_hidden 128 \\",
+        "  --transformer_d_model 512 --epochs 50",
+        "",
+        "# Hibrit model ile Optuna optimization",
+        "python -m src.cli tune --model_type hybrid_lstm_transformer \\",
+        "  --optuna_runs 50 --epochs 30"
+    ]
+}
+
+__all__ = [
+    'load', 
+    'save', 
+    'get_default_config', 
+    'DEFAULT_CONFIG_PATH',
+    'get_model_config', 
+    'add_hybrid_model_args', 
+    'DEFAULT_HYBRID_CONFIG',
+    'TEST_CONFIGS', 
+    'EXAMPLE_COMMANDS'
+]
